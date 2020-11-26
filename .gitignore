@@ -1,0 +1,43 @@
+Meta
+doc
+# Resilio Sync
+.sync
+
+# MAC
+*Icon*
+.DS_Store
+# Rstudio projects
+*Rproj
+# Distribution / packaging
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.pyc
+*.egg-info/
+.installed.cfg
+*.egg
+.Rproj.user
+.ipynb_checkpoints
+.Rhistory
+.idea/
+
+*/_build
+
+docs/notebooks/results/
+docs/notebooks/data/
+
+init_*
+model_*.p
+samples_*.p
+*.h5ad
+histo_W_*.png
