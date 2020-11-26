@@ -561,13 +561,14 @@ class PyroModel(BaseModel):
         for i in self.hist.keys():
             print(plt.plot(np.log10(np.array(self.hist[i])[iter_start:iter_end])));
 
-    def predictive(self, model, guide, x_data, extra_data, num_samples, node, random_seed):
+    def predictive(self, model, guide, x_data, extra_data, num_samples, node, random_seed,
+                   parallel=False):
 
         extra_data['x_data'] = x_data
 
         return Predictive(model=model, guide=guide, params=extra_data,
                           num_samples=num_samples, return_sites=node,
-                          parallel=True)(rng_key=random.PRNGKey(random_seed),
+                          parallel=parallel)(rng_key=random.PRNGKey(random_seed),
                                          **extra_data)
 
     def sample_node1(self, node, init, batch_size: int = 10, random_seed=65756):
