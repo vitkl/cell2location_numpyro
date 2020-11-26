@@ -571,7 +571,7 @@ class PyroModel(BaseModel):
                           parallel=parallel)(rng_key=random.PRNGKey(random_seed),
                                          **extra_data)
 
-    def sample_node1(self, node, init, batch_size: int = 10, random_seed=65756):
+    def sample_node1(self, node, init, batch_size: int = 50, random_seed=65756):
 
         post_samples = self.predictive(model=self.model, guide=self.guide_i[init],
                                        x_data=self.x_data, extra_data=self.extra_data,
@@ -583,7 +583,7 @@ class PyroModel(BaseModel):
         return post_samples[node]
 
     def sample_node(self, node, init, n_sampl_iter,
-                    batch_size: int = 10, suff='', random_seed=65756):
+                    batch_size: int = 50, suff='', random_seed=65756):
 
         # sample first batch
         self.samples[node + suff][init] = self.sample_node1(node, init, batch_size=batch_size,
@@ -600,7 +600,7 @@ class PyroModel(BaseModel):
         # compute mean across samples
         self.samples[node + suff][init] = np.array(self.samples[node + suff][init].mean(0))
 
-    def sample_all1(self, init='init_1', batch_size: int = 10, random_seed=65756):
+    def sample_all1(self, init='init_1', batch_size: int = 50, random_seed=65756):
 
         # nodes = self.state[init].keys
         # nodes = nodes[nodes != "data_target"]
@@ -616,7 +616,7 @@ class PyroModel(BaseModel):
 
         return post_samples
 
-    def sample_all(self, n_sampl_iter, init='init_1', batch_size: int = 10, random_seed=65756):
+    def sample_all(self, n_sampl_iter, init='init_1', batch_size: int = 50, random_seed=65756):
 
         # sample first batch
         self.samples['post_samples'] = self.sample_all1(init, batch_size=batch_size,
