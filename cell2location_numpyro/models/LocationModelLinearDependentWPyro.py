@@ -184,7 +184,7 @@ class LocationModelLinearDependentWPyro(PyroLocModel):
                           'gene_level', 'gene_level_alpha_hyp', 'gene_level_beta_hyp',
                           'combs_factors', 'comb_per_spot', 'cells_per_spot', 'factors_per_combs',
                           'comb2fact', 'spot_factors', 'spot_add', 'spot_add_hyp',
-                          'gene_add', 'gene_add_hyp']
+                          'gene_add', 'gene_add_hyp', 'gene_factors']
 
     ############# Define the model ################
     def model(self, x_data):
