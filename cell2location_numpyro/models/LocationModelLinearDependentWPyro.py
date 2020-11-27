@@ -205,106 +205,106 @@ class LocationModelLinearDependentWPyro(PyroLocModel):
         else:
             n_g_prior = self.n_var
 
-        self.gene_level_alpha_hyp = pyro.sample('gene_level_alpha_hyp',
+        gene_level_alpha_hyp = pyro.sample('gene_level_alpha_hyp',
                                                 Gamma(mu=shape,
                                                       sigma=jnp.sqrt(shape_var),
                                                       shape=(n_g_prior, 1)))
 
-        self.gene_level_beta_hyp = pyro.sample('gene_level_beta_hyp',
+        gene_level_beta_hyp = pyro.sample('gene_level_beta_hyp',
                                                Gamma(mu=rate,
                                                      sigma=jnp.sqrt(rate_var),
                                                      shape=(n_g_prior, 1)))
 
-        self.gene_level = pyro.sample('gene_level',
-                                      Gamma(alpha=self.gene_level_alpha_hyp,
-                                            beta=self.gene_level_beta_hyp,
+        gene_level = pyro.sample('gene_level',
+                                      Gamma(alpha=gene_level_alpha_hyp,
+                                            beta=gene_level_beta_hyp,
                                             shape=(self.n_var, 1)))
 
         # scale cell state factors by gene_level
-        self.gene_factors = pyro.deterministic('gene_factors', self.cell_state)
+        gene_factors = pyro.deterministic('gene_factors', self.cell_state)
 
         # =====================Spot factors======================= #
         # prior on spot factors reflects the number of cells, fraction of their cytoplasm captured,
         # times heterogeneity in the total number of mRNA between individual cells with each cell type
-        self.cells_per_spot = pyro.sample('cells_per_spot',
+        cells_per_spot = pyro.sample('cells_per_spot',
                                           Gamma(mu=self.cell_number_prior['cells_per_spot'],
                                                 sigma=jnp.sqrt(self.cell_number_prior['cells_per_spot'] \
                                                                / self.cell_number_prior['cells_mean_var_ratio']),
                                                 shape=(self.n_obs, 1)))
 
-        self.comb_per_spot = pyro.sample('combs_per_spot',
+        comb_per_spot = pyro.sample('combs_per_spot',
                                          Gamma(mu=self.cell_number_prior['combs_per_spot'],
                                                sigma=jnp.sqrt(self.cell_number_prior['combs_per_spot'] \
                                                               / self.cell_number_prior['combs_mean_var_ratio']),
                                                shape=(self.n_obs, 1)))
 
-        shape = self.comb_per_spot / self.n_comb
-        rate = jnp.ones([1, 1]) / self.cells_per_spot * self.comb_per_spot
+        shape = comb_per_spot / self.n_comb
+        rate = jnp.ones([1, 1]) / cells_per_spot * comb_per_spot
 
-        self.combs_factors = pyro.sample('combs_factors',
+        combs_factors = pyro.sample('combs_factors',
                                          Gamma(alpha=shape,
                                                beta=rate,
                                                shape=(self.n_obs, self.n_comb)))
 
-        self.factors_per_combs = pyro.sample('factors_per_combs',
+        factors_per_combs = pyro.sample('factors_per_combs',
                                              Gamma(mu=self.cell_number_prior['factors_per_combs'],
                                                    sigma=jnp.sqrt(self.cell_number_prior['factors_per_combs'] \
                                                                   / self.cell_number_prior['factors_mean_var_ratio']),
                                                    shape=(self.n_comb, 1)))
 
         c2f_shape = self.factors_per_combs / jnp.array(self.n_fact)
-        self.comb2fact = pyro.sample('comb2fact',
+        comb2fact = pyro.sample('comb2fact',
                                      Gamma(alpha=c2f_shape,
-                                           beta=self.factors_per_combs,
+                                           beta=factors_per_combs,
                                            shape=(self.n_comb, self.n_fact)))
 
-        spot_factors_mu = jnp.dot(self.combs_factors, self.comb2fact)
+        spot_factors_mu = jnp.dot(combs_factors, comb2fact)
         spot_factors_sigma = jnp.sqrt(spot_factors_mu / self.spot_fact_mean_var_ratio)
 
-        self.spot_factors = pyro.sample('spot_factors',
+        spot_factors = pyro.sample('spot_factors',
                                         Gamma(mu=spot_factors_mu,
                                               sigma=spot_factors_sigma))
 
         # =====================Spot-specific additive component======================= #
         # molecule contribution that cannot be explained by cell state signatures
         # these counts are distributed between all genes not just expressed genes
-        self.spot_add_hyp = pyro.sample('spot_add_hyp', Gamma(alpha=1, beta=1, shape=2))
-        self.spot_add = pyro.sample('spot_add', Gamma(alpha=self.spot_add_hyp[0],
-                                                      beta=self.spot_add_hyp[1],
+        spot_add_hyp = pyro.sample('spot_add_hyp', Gamma(alpha=1, beta=1, shape=2))
+        spot_add = pyro.sample('spot_add', Gamma(alpha=self.spot_add_hyp[0],
+                                                      beta=spot_add_hyp[1],
                                                       shape=(self.n_obs, 1)))
 
         # =====================Gene-specific additive component ======================= #
         # per gene molecule contribution that cannot be explained by cell state signatures
         # these counts are distributed equally between all spots (e.g. background, free-floating RNA)
-        self.gene_add_hyp = pyro.sample('gene_add_hyp', Gamma(alpha=1, beta=1, shape=2))
-        self.gene_add = pyro.sample('gene_add', Gamma(alpha=self.gene_add_hyp[0],
-                                                      beta=self.gene_add_hyp[1],
+        gene_add_hyp = pyro.sample('gene_add_hyp', Gamma(alpha=1, beta=1, shape=2))
+        gene_add = pyro.sample('gene_add', Gamma(alpha=gene_add_hyp[0],
+                                                      beta=gene_add_hyp[1],
                                                       shape=(self.n_var, 1)))
 
         # =====================Gene-specific overdispersion ======================= #
-        self.phi_hyp = pyro.sample('phi_hyp',
+        phi_hyp = pyro.sample('phi_hyp',
                                    Gamma(mu=self.phi_hyp_prior['mean'],
                                          sigma=self.phi_hyp_prior['sd'],
                                          shape=(1, 1)))
 
-        self.gene_E = pyro.sample('gene_E', dist.Exponential(jnp.ones([self.n_var, 1]) * self.phi_hyp[0, 0]))
+        gene_E = pyro.sample('gene_E', dist.Exponential(jnp.ones([self.n_var, 1]) * phi_hyp[0, 0]))
 
         # =====================Expected expression ======================= #
         # expected expression
-        self.mu_biol = jnp.dot(self.spot_factors, self.gene_factors.T) * self.gene_level.T \
-                       + self.gene_add.T + self.spot_add
-        self.theta = jnp.ones([1, 1]) / (self.gene_E.T * self.gene_E.T)
+        mu_biol = jnp.dot(spot_factors, gene_factors.T) * gene_level.T \
+                       + gene_add.T + spot_add
+        theta = jnp.ones([1, 1]) / (gene_E.T * gene_E.T)
 
         # =====================DATA likelihood ======================= #
         # Likelihood (sampling distribution) of data_target & add overdispersion via NegativeBinomial
-        self.data_target = pyro.sample('data_target',
-                                       GammaPoisson(concentration=self.theta,
-                                                    rate=self.theta / self.mu_biol),
+        data_target = pyro.sample('data_target',
+                                       GammaPoisson(concentration=theta,
+                                                    rate=theta / mu_biol),
                                        obs=x_data)
 
         # =====================Compute nUMI from each factor in spots  ======================= #
-        nUMI = (self.spot_factors * (self.gene_factors * self.gene_level).sum(0))
-        self.nUMI_factors = pyro.deterministic('nUMI_factors', nUMI)
+        nUMI = (spot_factors * (gene_factors * gene_level).sum(0))
+        nUMI_factors = pyro.deterministic('nUMI_factors', nUMI)
 
     def compute_expected(self):
         r"""Compute expected expression of each gene in each spot (Poisson mu). Useful for evaluating how well
