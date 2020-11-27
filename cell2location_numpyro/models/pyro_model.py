@@ -565,7 +565,7 @@ class PyroModel(BaseModel):
                    parallel=False):
 
         extra_data['x_data'] = x_data
-
+        return
         return Predictive(model=model, guide=guide, params=extra_data,
                           num_samples=num_samples, return_sites=node,
                           parallel=parallel)(rng_key=random.PRNGKey(random_seed),
