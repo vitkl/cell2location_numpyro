@@ -619,17 +619,17 @@ class PyroModel(BaseModel):
     def sample_all(self, n_sampl_iter, init='init_1', batch_size: int = 50, random_seed=65756):
 
         # sample first batch
-        self.samples['post_samples'] = self.sample_all1(init, batch_size=batch_size,
-                                       random_seed=random_seed)
+        # self.samples['post_samples'] = self.sample_all1(init, batch_size=batch_size,
+        #                                random_seed=random_seed)
 
         for it in tqdm(range(n_sampl_iter - 1)):
             # sample remaining batches
             post_samples = self.sample_all1(init, batch_size=batch_size)
 
             # concatenate batches
-            self.samples['post_samples'] = {k: np.concatenate((self.samples['post_samples'][k],
-                                                                post_samples[k]), axis=0)
-                                            for k in post_samples.keys()}
+            # self.samples['post_samples'] = {k: np.concatenate((self.samples['post_samples'][k],
+            #                                                     post_samples[k]), axis=0)
+            #                                 for k in post_samples.keys()}
 
     def b_evaluate_stability(self, node, n_samples: int = 1000, batch_size: int = 10,
                              align=True, transpose=True, random_seed=65756):
