@@ -252,7 +252,7 @@ class LocationModelLinearDependentWPyro(PyroLocModel):
                                                                   / self.cell_number_prior['factors_mean_var_ratio']),
                                                    shape=(self.n_comb, 1)))
 
-        c2f_shape = self.factors_per_combs / jnp.array(self.n_fact)
+        c2f_shape = factors_per_combs / jnp.array(self.n_fact)
         comb2fact = pyro.sample('comb2fact',
                                      Gamma(alpha=c2f_shape,
                                            beta=factors_per_combs,
