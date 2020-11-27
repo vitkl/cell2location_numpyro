@@ -640,6 +640,7 @@ class PyroModel(BaseModel):
         :param batch_size: generate samples in batches of size `batch_size`. Necessary for the computation to fit in the GPU memory 
         :return: self.samples[node_name+_stab] dictionary with an element for each training initialisation. 
         """
+        return
 
         self.n_samples = n_samples
         self.n_sampl_iter = int(np.ceil(n_samples / batch_size))
