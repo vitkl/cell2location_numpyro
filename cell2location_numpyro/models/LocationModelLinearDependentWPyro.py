@@ -346,11 +346,10 @@ class LocationModelLinearDependentWPyro(PyroLocModel):
 
         extra_data['x_data'] = x_data
 
-        lol =  Predictive(model=model, guide=guide, params=extra_data,
+        return Predictive(model=model, guide=guide, params=extra_data,
                           num_samples=num_samples, return_sites=node,
                           parallel=False)(rng_key=random.PRNGKey(random_seed),
                                           **extra_data)
-        return
 
     def step_train(self, name, x_data, extra_data):
         idx = extra_data.get('idx')

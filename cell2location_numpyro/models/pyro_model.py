@@ -566,7 +566,6 @@ class PyroModel(BaseModel):
                    parallel=False):
 
         extra_data['x_data'] = x_data
-        return
         return Predictive(model=model, guide=guide, params=extra_data,
                           num_samples=num_samples, return_sites=node,
                           parallel=parallel)(rng_key=random.PRNGKey(random_seed),
@@ -610,8 +609,6 @@ class PyroModel(BaseModel):
                                        x_data=self.x_data, extra_data=self.extra_data,
                                        num_samples=batch_size,
                                        random_seed=random_seed, node=self.node_list)
-        import gc
-        gc.collect()
         return
         print(post_samples.keys())
         post_samples = {k: np.array(v)
@@ -626,10 +623,10 @@ class PyroModel(BaseModel):
         # self.samples['post_samples'] = self.sample_all1(init, batch_size=batch_size,
         #                                random_seed=random_seed)
 
-        for it in tqdm(range(n_sampl_iter - 1)):
+
             # sample remaining batches
-            post_samples = self.sample_all1(init, batch_size=batch_size)
-            jax.profiler.save_device_memory_profile(f"memory-{it}.prof")
+        post_samples = self.sample_all1(init, batch_size=1000)
+
 
             # concatenate batches
             # self.samples['post_samples'] = {k: np.concatenate((self.samples['post_samples'][k],
