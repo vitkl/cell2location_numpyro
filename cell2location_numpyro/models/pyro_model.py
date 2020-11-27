@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 from tqdm.auto import tqdm
 
 import jax.numpy as jnp
+import jax.profiler
 from jax import device_put
 from jax import random, jit, lax
 import jaxlib
@@ -628,6 +629,7 @@ class PyroModel(BaseModel):
         for it in tqdm(range(n_sampl_iter - 1)):
             # sample remaining batches
             post_samples = self.sample_all1(init, batch_size=batch_size)
+            jax.profiler.save_device_memory_profile(f"memory-{it}.prof")
 
             # concatenate batches
             # self.samples['post_samples'] = {k: np.concatenate((self.samples['post_samples'][k],
