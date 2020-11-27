@@ -609,6 +609,7 @@ class PyroModel(BaseModel):
                                        x_data=self.x_data, extra_data=self.extra_data,
                                        num_samples=batch_size,
                                        random_seed=random_seed, node=self.node_list)
+        return
         print(post_samples.keys())
         post_samples = {k: np.array(v)
                         for k, v in post_samples.items() if k != "data_target"}
