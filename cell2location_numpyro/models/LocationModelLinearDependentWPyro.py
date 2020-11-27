@@ -229,13 +229,13 @@ class LocationModelLinearDependentWPyro(PyroLocModel):
         self.cells_per_spot = pyro.sample('cells_per_spot',
                                           Gamma(mu=self.cell_number_prior['cells_per_spot'],
                                                 sigma=jnp.sqrt(self.cell_number_prior['cells_per_spot'] \
-                                                              / self.cell_number_prior['cells_mean_var_ratio']),
+                                                               / self.cell_number_prior['cells_mean_var_ratio']),
                                                 shape=(self.n_obs, 1)))
 
         self.comb_per_spot = pyro.sample('combs_per_spot',
                                          Gamma(mu=self.cell_number_prior['combs_per_spot'],
                                                sigma=jnp.sqrt(self.cell_number_prior['combs_per_spot'] \
-                                                             / self.cell_number_prior['combs_mean_var_ratio']),
+                                                              / self.cell_number_prior['combs_mean_var_ratio']),
                                                shape=(self.n_obs, 1)))
 
         shape = self.comb_per_spot / self.n_comb
@@ -249,7 +249,7 @@ class LocationModelLinearDependentWPyro(PyroLocModel):
         self.factors_per_combs = pyro.sample('factors_per_combs',
                                              Gamma(mu=self.cell_number_prior['factors_per_combs'],
                                                    sigma=jnp.sqrt(self.cell_number_prior['factors_per_combs'] \
-                                                                 / self.cell_number_prior['factors_mean_var_ratio']),
+                                                                  / self.cell_number_prior['factors_mean_var_ratio']),
                                                    shape=(self.n_comb, 1)))
 
         c2f_shape = self.factors_per_combs / jnp.array(self.n_fact)
@@ -306,7 +306,6 @@ class LocationModelLinearDependentWPyro(PyroLocModel):
         nUMI = (self.spot_factors * (self.gene_factors * self.gene_level).sum(0))
         self.nUMI_factors = pyro.deterministic('nUMI_factors', nUMI)
 
-
     def compute_expected(self):
         r"""Compute expected expression of each gene in each spot (Poisson mu). Useful for evaluating how well
             the model learned expression pattern of all genes in the data.
@@ -320,7 +319,7 @@ class LocationModelLinearDependentWPyro(PyroLocModel):
                    + self.samples['post_sample_means']['spot_add'])
         self.alpha = 1 / (self.samples['post_sample_means']['gene_E'].T * self.samples['post_sample_means']['gene_E'].T)
 
-    #def run(self, name, x_data, extra_data,
+    # def run(self, name, x_data, extra_data,
     #        random_seed, n_iter, progressbar):
     #    r"""Function that passes data and extra data to numpyro.run"""
     #
@@ -328,7 +327,7 @@ class LocationModelLinearDependentWPyro(PyroLocModel):
     #                              num_steps=n_iter, progress_bar=progressbar,
     #                              x_data=x_data)#, **extra_data)
 
-    #def step_update2(self, svi_state, name, x_data, extra_data,
+    # def step_update2(self, svi_state, name, x_data, extra_data,
     #                random_seed, n_iter):
     #    r"""Function that passes data and extra data to numpyro.run"""
     #
@@ -338,7 +337,7 @@ class LocationModelLinearDependentWPyro(PyroLocModel):
     #
     #    return jit(body_fn)(svi_state)
 
-    #def step_init(self, name, x_data, extra_data, random_seed):
+    # def step_init(self, name, x_data, extra_data, random_seed):
     #
     #    return self.svi[name].init(random.PRNGKey(random_seed),
     #                               x_data=x_data)
@@ -347,10 +346,11 @@ class LocationModelLinearDependentWPyro(PyroLocModel):
 
         extra_data['x_data'] = x_data
 
-        return Predictive(model=model, guide=guide, params=extra_data,
+        lol =  Predictive(model=model, guide=guide, params=extra_data,
                           num_samples=num_samples, return_sites=node,
                           parallel=False)(rng_key=random.PRNGKey(random_seed),
-                                         **extra_data)
+                                          **extra_data)
+        return
 
     def step_train(self, name, x_data, extra_data):
         idx = extra_data.get('idx')
@@ -378,4 +378,3 @@ class LocationModelLinearDependentWPyro(PyroLocModel):
         model_tr = poutine.trace(poutine.replay(self.model,
                                                 trace=guide_tr)).get_trace(x_data, idx)
         return guide_tr, model_tr
-
