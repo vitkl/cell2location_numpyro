@@ -609,6 +609,8 @@ class PyroModel(BaseModel):
                                        x_data=self.x_data, extra_data=self.extra_data,
                                        num_samples=batch_size,
                                        random_seed=random_seed, node=self.node_list)
+        import gc
+        gc.collect()
         return
         print(post_samples.keys())
         post_samples = {k: np.array(v)
