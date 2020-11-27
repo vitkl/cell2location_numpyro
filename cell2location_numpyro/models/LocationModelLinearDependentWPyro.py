@@ -269,7 +269,7 @@ class LocationModelLinearDependentWPyro(PyroLocModel):
         # molecule contribution that cannot be explained by cell state signatures
         # these counts are distributed between all genes not just expressed genes
         spot_add_hyp = pyro.sample('spot_add_hyp', Gamma(alpha=1, beta=1, shape=2))
-        spot_add = pyro.sample('spot_add', Gamma(alpha=self.spot_add_hyp[0],
+        spot_add = pyro.sample('spot_add', Gamma(alpha=spot_add_hyp[0],
                                                       beta=spot_add_hyp[1],
                                                       shape=(self.n_obs, 1)))
 
