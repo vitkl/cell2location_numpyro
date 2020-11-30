@@ -182,7 +182,7 @@ class LocationModelLinearDependentWPyro(PyroLocModel):
 
         self.node_list = ['nUMI_factors', 'gene_E', 'phi_hyp',
                           'gene_level', 'gene_level_alpha_hyp', 'gene_level_beta_hyp',
-                          'combs_factors', 'comb_per_spot', 'cells_per_spot', 'factors_per_combs',
+                          'combs_factors', 'combs_per_spot', 'cells_per_spot', 'factors_per_combs',
                           'comb2fact', 'spot_factors', 'spot_add', 'spot_add_hyp',
                           'gene_add', 'gene_add_hyp', 'gene_factors']
 
@@ -343,14 +343,17 @@ class LocationModelLinearDependentWPyro(PyroLocModel):
     #    return self.svi[name].init(random.PRNGKey(random_seed),
     #                               x_data=x_data)
 
-    def predictive(self, model, guide, x_data, extra_data, num_samples, node, random_seed):
+    @staticmethod
+    def predictive(state, guide, num_samples, random_seed):
 
-        extra_data['x_data'] = x_data
+        #extra_data['x_data'] = x_data
 
-        return Predictive(model=model, guide=guide, params=extra_data,
-                          num_samples=num_samples, return_sites=node,
-                          parallel=True)(rng_key=random.PRNGKey(random_seed),
-                                         **extra_data)
+        #return Predictive(model=model, guide=guide, params=extra_data,
+        #                  num_samples=num_samples, return_sites=node,
+        #                  parallel=True)(rng_key=random.PRNGKey(random_seed),
+        #                                 **extra_data)
+        return guide.sample_posterior(random.PRNGKey(random_seed), state,
+                                      sample_shape=(num_samples,)).copy()
 
     def step_train(self, name, x_data, extra_data):
         idx = extra_data.get('idx')

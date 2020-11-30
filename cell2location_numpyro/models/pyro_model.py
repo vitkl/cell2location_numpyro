@@ -29,6 +29,27 @@ from torch.utils.data import Dataset, DataLoader
 
 from cell2location.models.base_model import BaseModel
 
+from functools import partial
+def init_to_mean(site=None):
+    """
+    Initialize to the prior mean; fallback to median if mean is undefined.
+    """
+    if site is None:
+        return partial(init_to_mean)
+
+    try:
+        # Try .mean() method.
+        if site['type'] == 'sample' and not site['is_observed'] and not site['fn'].is_discrete:
+            value = site["fn"].mean
+            #if jnp.isnan(value):
+            #    raise ValueError
+            if hasattr(site["fn"], "_validate_sample"):
+                site["fn"]._validate_sample(value)
+            return np.array(value)
+    except (NotImplementedError, ValueError):
+        # Fall back to a median.
+        # This is required for distributions with infinite variance, e.g. Cauchy.
+        return init_to_median(site)
 
 def numpy_collate(batch):
     if isinstance(batch[0], jnp.ndarray):
@@ -185,10 +206,10 @@ class PyroModel(BaseModel):
 
             # initialise Variational distributiion = guide
             if method is 'advi':
-                self.guide_i[name] = AutoNormal(self.model, init_loc_fn=init_to_feasible)#init_to_feasible, init_to_median)
+                self.guide_i[name] = AutoNormal(self.model, init_loc_fn=init_to_mean)#init_to_feasible, init_to_median)
 
             elif method is 'iaf':
-                self.guide_i[name] = AutoIAFNormal(self.model, init_loc_fn=init_to_feasible,#init_to_feasible, init_to_median
+                self.guide_i[name] = AutoIAFNormal(self.model, init_loc_fn=init_to_mean,#init_to_feasible, init_to_median
                                                    **guide_aevb_kwargs)
             elif method is 'custom':
                 self.guide_i[name] = self.guide
@@ -223,16 +244,18 @@ class PyroModel(BaseModel):
             # init_state = self.svi[name].init(random.PRNGKey(random_seed), x_data=self.x_data)
             # init_state = svi.init(random.PRNGKey(random_seed), x_data=x_data)
 
+            ### fast but does not train
             epochs_iterator = tqdm(range(1))
             for e in epochs_iterator:
                 state, losses = lax.scan(lambda state_1, i: self.svi[name].update(state_1,
                                                                                   x_data=self.x_data), # TODO for minibatch DataLoader goes here
                                          init_state, jnp.arange(n_iter))
+                #print(state)
                 epochs_iterator.set_description('ELBO Loss: ' + '{:.4e}'.format(losses[::-1][0]))
             self.state[name] = state
             self.hist[name] = losses
 
-            ###
+            ### very slow
             # epochs_iterator = tqdm(range(n_iter))
             # for e in epochs_iterator:
             #    self.state[name], loss = self.step_update(svi=self.svi[name],
@@ -560,25 +583,29 @@ class PyroModel(BaseModel):
         """
         for i in self.hist.keys():
             print(plt.plot(np.log10(np.array(self.hist[i])[iter_start:iter_end])));
+    @staticmethod
+    def predictive(state, guide, num_samples, random_seed):
 
-    def predictive(self, model, guide, x_data, extra_data, num_samples, node, random_seed,
-                   parallel=False):
+        #extra_data['x_data'] = x_data
 
-        extra_data['x_data'] = x_data
-
-        return Predictive(model=model, guide=guide, params=extra_data,
-                          num_samples=num_samples, return_sites=node,
-                          parallel=parallel)(rng_key=random.PRNGKey(random_seed),
-                                         **extra_data)
+        #return Predictive(model=model, guide=guide, params=extra_data,
+        #                  num_samples=num_samples, return_sites=node,
+        #                  parallel=True)(rng_key=random.PRNGKey(random_seed),
+        #                                 **extra_data)
+        return guide.sample_posterior(random.PRNGKey(random_seed), state,
+                                      sample_shape=(num_samples,)).copy()
 
     def sample_node1(self, node, init, batch_size: int = 50, random_seed=65756):
 
-        post_samples = self.predictive(model=self.model, guide=self.guide_i[init],
-                                       x_data=self.x_data, extra_data=self.extra_data,
-                                       num_samples=batch_size, node=[node],
-                                       random_seed=random_seed)
+        post_samples = self.predictive(state=self.svi[init].get_params(self.state[init]), 
+                                       guide=self.guide_i[init], 
+                                       num_samples=batch_size, random_seed=random_seed)
+        #self.predictive(model=self.model, guide=self.guide_i[init],
+        #                               x_data=self.x_data, extra_data=self.extra_data,
+        #                               num_samples=batch_size, node=[node],
+        #                               random_seed=random_seed)
         post_samples = {k: np.array(v)
-                        for k, v in post_samples.items()}
+                        for k, v in post_samples.items() if k == node}
 
         return post_samples[node]
 
@@ -604,15 +631,21 @@ class PyroModel(BaseModel):
 
         # nodes = self.state[init].keys
         # nodes = nodes[nodes != "data_target"]
+        
+        post_samples = self.predictive(state=self.svi[init].get_params(self.state[init]), 
+                                       guide=self.guide_i[init], 
+                                       num_samples=batch_size, random_seed=random_seed)
+        #self.predictive(model=self.model, guide=self.guide_i[init],
+        #                               x_data=self.x_data, extra_data=self.extra_data,
+        #                               num_samples=batch_size, node=[node],
+        #                               random_seed=random_seed)
 
-        post_samples = self.predictive(model=self.model, guide=self.guide_i[init],
-                                       x_data=self.x_data, extra_data=self.extra_data,
-                                       num_samples=batch_size,
-                                       random_seed=random_seed, node=self.node_list)
-        print(post_samples.keys())
+        #post_samples = self.predictive(model=self.model, guide=self.guide_i[init],
+        #                               x_data=self.x_data, extra_data=self.extra_data,
+        #                               num_samples=batch_size,
+        #                               random_seed=random_seed, node=self.node_list)
         post_samples = {k: np.array(v)
                         for k, v in post_samples.items() if k != "data_target"}
-        print(post_samples.keys())
 
         return post_samples
 
