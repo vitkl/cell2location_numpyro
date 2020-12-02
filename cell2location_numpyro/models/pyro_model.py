@@ -21,35 +21,14 @@ from numpyro.infer.autoguide import AutoNormal
 from numpyro.infer.autoguide import AutoIAFNormal
 # from numpyro.infer.autoguide import AutoDelta
 # from numpyro.infer.autoguide import AutoGuideList
-from numpyro.infer import init_to_feasible, init_to_median
 import numpyro.optim as optim
 from sklearn.model_selection import train_test_split
 
 from torch.utils.data import Dataset, DataLoader
 
 from cell2location.models.base_model import BaseModel
-
-from functools import partial
-def init_to_mean(site=None):
-    """
-    Initialize to the prior mean; fallback to median if mean is undefined.
-    """
-    if site is None:
-        return partial(init_to_mean)
-
-    try:
-        # Try .mean() method.
-        if site['type'] == 'sample' and not site['is_observed'] and not site['fn'].is_discrete:
-            value = site["fn"].mean
-            #if jnp.isnan(value):
-            #    raise ValueError
-            if hasattr(site["fn"], "_validate_sample"):
-                site["fn"]._validate_sample(value)
-            return np.array(value)
-    except (NotImplementedError, ValueError):
-        # Fall back to a median.
-        # This is required for distributions with infinite variance, e.g. Cauchy.
-        return init_to_median(site)
+from cell2location_numpyro.distributions.AutoNormal import AutoNormal
+from cell2location_numpyro.distributions.AutoNormal import init_to_mean
 
 def numpy_collate(batch):
     if isinstance(batch[0], jnp.ndarray):
