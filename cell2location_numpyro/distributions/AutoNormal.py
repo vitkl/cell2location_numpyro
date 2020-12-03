@@ -27,6 +27,8 @@ from numpyro import handlers
 from numpyro.distributions.util import periodic_repeat, sum_rightmost
 
 from functools import partial
+
+
 def init_to_mean(site=None):
     """
     Initialize to the prior mean; fallback to median if mean is undefined.
@@ -38,7 +40,7 @@ def init_to_mean(site=None):
         # Try .mean() method.
         if site['type'] == 'sample' and not site['is_observed'] and not site['fn'].is_discrete:
             value = site["fn"].mean
-            #if jnp.isnan(value):
+            # if jnp.isnan(value):
             #    raise ValueError
             if hasattr(site["fn"], "_validate_sample"):
                 site["fn"]._validate_sample(value)
@@ -47,6 +49,7 @@ def init_to_mean(site=None):
         # Fall back to a median.
         # This is required for distributions with infinite variance, e.g. Cauchy.
         return init_to_median(site)
+
 
 class AutoNormal(AutoGuide):
     """
@@ -69,7 +72,8 @@ class AutoNormal(AutoGuide):
         or iterable of plates. Plates not returned will be created
         automatically as usual. This is useful for data subsampling.
     """
-    def __init__(self, model, *, prefix="auto", init_loc_fn=init_to_mean, init_scale=0.1,
+
+    def __init__(self, model, *, prefix="auto", init_loc_fn=init_to_mean, init_scale=0.0,
                  create_plates=None):
         self._init_scale = init_scale
         self._event_dims = {}
@@ -116,10 +120,16 @@ class AutoNormal(AutoGuide):
 
                 site_loc = numpyro.param("{}_{}_loc".format(name, self.prefix), init_loc,
                                          event_dim=event_dim)
+
+                #def inv_softplus(x):
+                #    return jnp.log(jnp.exp(jnp.abs(x)) - jnp.ones((1, 1)))
+
+                #self._init_scale = inv_softplus(jnp.sqrt(jnp.abs(init_loc)))
+
                 site_scale_unconstrained = numpyro.param("{}_{}_scale".format(name, self.prefix),
-                                           jnp.full(jnp.shape(init_loc), self._init_scale),
-                                           constraint=constraints.real,
-                                           event_dim=event_dim)
+                                                         jnp.full(jnp.shape(init_loc), self._init_scale),#self._init_scale,
+                                                         constraint=constraints.real,
+                                                         event_dim=event_dim)
                 site_scale = softplus(site_scale_unconstrained)
 
                 site_fn = dist.Normal(site_loc, site_scale).to_event(event_dim)
@@ -142,7 +152,7 @@ class AutoNormal(AutoGuide):
     def _constrain(self, latent_samples):
         name = list(latent_samples)[0]
         sample_shape = jnp.shape(latent_samples[name])[
-            :jnp.ndim(latent_samples[name]) - jnp.ndim(self._init_locs[name])]
+                       :jnp.ndim(latent_samples[name]) - jnp.ndim(self._init_locs[name])]
         if sample_shape:
             flatten_samples = tree_map(lambda x: jnp.reshape(x, (-1,) + jnp.shape(x)[len(sample_shape):]),
                                        latent_samples)
