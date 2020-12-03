@@ -17,7 +17,7 @@ import numpyro as pyro
 from numpyro import handlers as poutine  # -
 from numpyro.infer import SVI, Trace_ELBO
 from numpyro.infer import Predictive
-from numpyro.infer.autoguide import AutoNormal
+#from numpyro.infer.autoguide import AutoNormal
 from numpyro.infer.autoguide import AutoIAFNormal
 # from numpyro.infer.autoguide import AutoDelta
 # from numpyro.infer.autoguide import AutoGuideList
@@ -27,8 +27,11 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset, DataLoader
 
 from cell2location.models.base_model import BaseModel
+#from cell2location_numpyro.distributions.AutoNormalSoftplus import AutoNormal
+#import cell2location_numpyro.distributions.AutoNormalSoftplus
 from cell2location_numpyro.distributions.AutoNormal import AutoNormal
 from cell2location_numpyro.distributions.AutoNormal import init_to_mean
+
 
 def numpy_collate(batch):
     if isinstance(batch[0], jnp.ndarray):
@@ -137,7 +140,7 @@ class PyroModel(BaseModel):
 
     def fit_advi_iterative(self, n: int = 3, method='advi', n_type='restart',
                            n_iter=None, learning_rate=None, progressbar=True,
-                           guide_aevb_kwargs={}, random_seed=5475):
+                           guide_aevb_kwargs={}, random_seed=[5475, 436, 24546, 46]):
         r""" Find posterior using ADVI (deprecated)
         (maximising likehood of the data and minimising KL-divergence of posterior to prior)
         :param n: number of independent initialisations
@@ -185,10 +188,12 @@ class PyroModel(BaseModel):
 
             # initialise Variational distributiion = guide
             if method is 'advi':
-                self.guide_i[name] = AutoNormal(self.model, init_loc_fn=init_to_mean)#init_to_feasible, init_to_median)
+                self.guide_i[name] = AutoNormal(self.model,
+                                                init_loc_fn=init_to_mean)  # init_to_feasible, init_to_median)
 
             elif method is 'iaf':
-                self.guide_i[name] = AutoIAFNormal(self.model, init_loc_fn=init_to_mean,#init_to_feasible, init_to_median
+                self.guide_i[name] = AutoIAFNormal(self.model, init_loc_fn=init_to_mean,
+                                                   # init_to_feasible, init_to_median
                                                    **guide_aevb_kwargs)
             elif method is 'custom':
                 self.guide_i[name] = self.guide
@@ -219,7 +224,7 @@ class PyroModel(BaseModel):
             #                                             random_seed, n_iter, progressbar)
 
             # self.state[name] = self.step_init(name, self.x_data, self.extra_data, random_seed)
-            init_state = self.step_init(name, self.x_data, self.extra_data, random_seed)
+            init_state = self.step_init(name, self.x_data, self.extra_data, self.random_seed[i])
             # init_state = self.svi[name].init(random.PRNGKey(random_seed), x_data=self.x_data)
             # init_state = svi.init(random.PRNGKey(random_seed), x_data=x_data)
 
@@ -227,11 +232,12 @@ class PyroModel(BaseModel):
             epochs_iterator = tqdm(range(1))
             for e in epochs_iterator:
                 state, losses = lax.scan(lambda state_1, i: self.svi[name].update(state_1,
-                                                                                  x_data=self.x_data), # TODO for minibatch DataLoader goes here
+                                                                                  x_data=self.x_data),
+                                         # TODO for minibatch DataLoader goes here
                                          init_state, jnp.arange(n_iter))
-                #print(state)
+                # print(state)
                 epochs_iterator.set_description('ELBO Loss: ' + '{:.4e}'.format(losses[::-1][0]))
-            self.state[name] = state
+            self.state[name] = self.svi[name].get_params(state).copy()
             self.hist[name] = losses
 
             ### very slow
@@ -273,273 +279,6 @@ class PyroModel(BaseModel):
         """
         pass
 
-    def fit_advi_iterative_complex(self, n=3, method='advi', n_type='restart',
-                                   n_iter=None, learning_rate=None,
-                                   progressbar=True, num_workers=2,
-                                   train_proportion=None, stratify_cv=None,
-                                   l2_weight=False, sample_scaling_weight=0.5,
-                                   checkpoints=None,
-                                   checkpoint_dir='./checkpoints',
-                                   tracking=False):
-
-        r""" Train posterior using ADVI method.
-        (maximising likehood of the data and minimising KL-divergence of posterior to prior)
-        :param n: number of independent initialisations
-        :param method: to allow for potential use of SVGD or MCMC (currently only ADVI implemented).
-        :param n_type: type of repeated initialisation:
-                                  'restart' to pick different initial value,
-                                  'cv' for molecular cross-validation - splits counts into n datasets,
-                                         for now, only n=2 is implemented
-                                  'bootstrap' for fitting the model to multiple downsampled datasets.
-                                         Run `mod.bootstrap_data()` to generate variants of data
-        :param n_iter: number of iterations, supersedes self.n_iter
-        :param train_proportion: if not None, which proportion of cells to use for training and which for validation.
-        :param checkpoints: int, list of int's or None, number of checkpoints to save while model training or list of
-            iterations to save checkpoints on
-        :param checkpoint_dir: str, directory to save checkpoints in
-        :param tracking: bool, track all latent variables during training - if True makes training 2 times slower
-        :return: None
-        """
-
-        # initialise parameter store
-        self.svi = {}
-        self.hist = {}
-        self.guide_i = {}
-        self.samples = {}
-        self.node_samples = {}
-
-        if tracking:
-            self.logp_hist = {}
-
-        if n_iter is None:
-            n_iter = self.n_iter
-
-        if type(checkpoints) is int:
-            if n_iter < checkpoints:
-                checkpoints = n_iter
-            checkpoints = np.linspace(0, n_iter, checkpoints + 1, dtype=int)[1:]
-            self.checkpoints = list(checkpoints)
-        else:
-            self.checkpoints = checkpoints
-
-        self.checkpoint_dir = checkpoint_dir
-
-        self.n_type = n_type
-        self.l2_weight = l2_weight
-        self.sample_scaling_weight = sample_scaling_weight
-        self.train_proportion = train_proportion
-
-        if stratify_cv is not None:
-            self.stratify_cv = stratify_cv
-
-        if train_proportion is not None:
-            self.validation_hist = {}
-            self.training_hist = {}
-            if tracking:
-                self.logp_hist_val = {}
-                self.logp_hist_train = {}
-
-        if learning_rate is None:
-            learning_rate = self.learning_rate
-
-        if np.isin(n_type, ['bootstrap']):
-            if self.X_data_sample is None:
-                self.bootstrap_data(n=n)
-        elif np.isin(n_type, ['cv']):
-            self.generate_cv_data()  # cv data added to self.X_data_sample
-
-        init_names = ['init_' + str(i + 1) for i in np.arange(n)]
-
-        for i, name in enumerate(init_names):
-            ################### Initialise parameters & optimiser ###################
-            # initialise Variational distribution = guide
-            if method is 'advi':
-                self.guide_i[name] = AutoGuideList(self.model)
-                normal_guide_block = poutine.block(self.model, expose_all=True, hide_all=False,
-                                                   hide=self.point_estim + flatten_iterable(self.custom_guides.keys()))
-                self.guide_i[name].append(AutoNormal(normal_guide_block, init_loc_fn=init_to_feasible))
-                self.guide_i[name].append(AutoDelta(poutine.block(self.model, hide_all=True, expose=self.point_estim)))
-                for k, v in self.custom_guides.items():
-                    self.guide_i[name].append(v)
-
-            elif method is 'custom':
-                self.guide_i[name] = self.guide
-
-            # initialise SVI inference method
-            self.svi[name] = SVI(self.model, self.guide_i[name],
-                                 optim.ClippedAdam({'lr': learning_rate,
-                                                    # limit the gradient step from becoming too large
-                                                    'clip_norm': self.total_grad_norm_constraint}),
-                                 loss=Trace_ELBO())
-
-            pyro.clear_param_store()
-
-            self.set_initial_values()
-
-            # record ELBO Loss history here
-            self.hist[name] = []
-            if tracking:
-                self.logp_hist[name] = defaultdict(list)
-
-            if train_proportion is not None:
-                self.validation_hist[name] = []
-                if tracking:
-                    self.logp_hist_val[name] = defaultdict(list)
-
-            ################### Select data for this iteration ###################
-            if np.isin(n_type, ['cv', 'bootstrap']):
-                X_data = self.X_data_sample[i].astype(self.data_type)
-            else:
-                X_data = self.X_data.astype(self.data_type)
-
-            ################### Training / validation split ###################
-            # split into training and validation
-            if train_proportion is not None:
-                idx = np.arange(len(X_data))
-                train_idx, val_idx = train_test_split(idx, train_size=train_proportion,
-                                                      shuffle=True, stratify=self.stratify_cv)
-
-                extra_data_val = {k: torch.FloatTensor(v[val_idx]).to(self.device) for k, v in self.extra_data.items()}
-                extra_data_train = {k: torch.FloatTensor(v[train_idx]) for k, v in self.extra_data.items()}
-
-                x_data_val = torch.FloatTensor(X_data[val_idx]).to(self.device)
-                x_data = torch.FloatTensor(X_data[train_idx])
-            else:
-                # just convert data to CPU tensors
-                x_data = torch.FloatTensor(X_data)
-                extra_data_train = {k: torch.FloatTensor(v) for k, v in self.extra_data.items()}
-
-            ################### Move data to cuda - FULL data ###################
-            # if not minibatch do this:
-            if self.minibatch_size is None:
-                # move tensors to CUDA
-                x_data = x_data.to(self.device)
-                for k in extra_data_train.keys():
-                    extra_data_train[k] = extra_data_train[k].to(self.device)
-                # extra_data_train = {k: v.to(self.device) for k, v in extra_data_train.items()}
-
-            ################### MINIBATCH data ###################
-            else:
-                # create minibatches
-                dataset = MiniBatchDataset(x_data, extra_data_train, return_idx=True)
-                loader = NumpyLoader(dataset, batch_size=self.minibatch_size,
-                                     num_workers=0)  # TODO num_workers
-
-            ################### Training the model ###################
-            # start training in epochs
-            epochs_iterator = tqdm(range(n_iter))
-            for epoch in epochs_iterator:
-
-                if self.minibatch_size is None:
-                    ################### Training FULL data ###################
-                    iter_loss = self.step_train(name, x_data, extra_data_train)
-
-                    self.hist[name].append(iter_loss)
-                    # save data for posterior sampling
-                    self.x_data = x_data
-                    self.extra_data_train = extra_data_train
-
-                    if tracking:
-                        guide_tr, model_tr = self.step_trace(name, x_data, extra_data_train)
-                        self.logp_hist[name]['guide'].append(guide_tr.log_prob_sum().item())
-                        self.logp_hist[name]['model'].append(model_tr.log_prob_sum().item())
-
-                        for k, v in model_tr.nodes.items():
-                            if "log_prob_sum" in v:
-                                self.logp_hist[name][k].append(v["log_prob_sum"].item())
-
-                else:
-                    ################### Training MINIBATCH data ###################
-                    aver_loss = []
-                    if tracking:
-                        aver_logp_guide = []
-                        aver_logp_model = []
-                        aver_logp = defaultdict(list)
-
-                    for batch in loader:
-
-                        x_data_batch, extra_data_batch = batch
-                        x_data_batch = x_data_batch.to(self.device)
-                        extra_data_batch = {k: v.to(self.device) for k, v in extra_data_batch.items()}
-
-                        loss = self.step_train(name, x_data_batch, extra_data_batch)
-
-                        if tracking:
-                            guide_tr, model_tr = self.step_trace(name, x_data_batch, extra_data_batch)
-                            aver_logp_guide.append(guide_tr.log_prob_sum().item())
-                            aver_logp_model.append(model_tr.log_prob_sum().item())
-
-                            for k, v in model_tr.nodes.items():
-                                if "log_prob_sum" in v:
-                                    aver_logp[k].append(v["log_prob_sum"].item())
-
-                        aver_loss.append(loss)
-
-                    iter_loss = np.sum(aver_loss)
-
-                    # save data for posterior sampling
-                    self.x_data = x_data_batch
-                    self.extra_data_train = extra_data_batch
-
-                    self.hist[name].append(iter_loss)
-
-                    if tracking:
-                        iter_logp_guide = np.sum(aver_logp_guide)
-                        iter_logp_model = np.sum(aver_logp_model)
-                        self.logp_hist[name]['guide'].append(iter_logp_guide)
-                        self.logp_hist[name]['model'].append(iter_logp_model)
-
-                        for k, v in aver_logp.items():
-                            self.logp_hist[name][k].append(np.sum(v))
-
-                if self.checkpoints is not None:
-                    if (epoch + 1) in self.checkpoints:
-                        self.save_checkpoint(epoch + 1, prefix=name)
-
-                ################### Evaluating cross-validation loss ###################
-                if train_proportion is not None:
-
-                    iter_loss_val = self.step_eval_loss(name, x_data_val, extra_data_val)
-
-                    if tracking:
-                        guide_tr, model_tr = self.step_trace(name, x_data_val, extra_data_val)
-                        self.logp_hist_val[name]['guide'].append(guide_tr.log_prob_sum().item())
-                        self.logp_hist_val[name]['model'].append(model_tr.log_prob_sum().item())
-
-                        for k, v in model_tr.nodes.items():
-                            if "log_prob_sum" in v:
-                                self.logp_hist_val[name][k].append(v["log_prob_sum"].item())
-
-                    self.validation_hist[name].append(iter_loss_val)
-                    epochs_iterator.set_description(f'ELBO Loss: ' + '{:.4e}'.format(iter_loss) \
-                                                    + ': Val loss: ' + '{:.4e}'.format(iter_loss_val))
-                else:
-                    epochs_iterator.set_description('ELBO Loss: ' + '{:.4e}'.format(iter_loss))
-
-                if epoch % 20 == 0:
-                    torch.cuda.empty_cache()
-
-            if train_proportion is not None:
-                # rescale loss
-                self.validation_hist[name] = [i / (1 - train_proportion)
-                                              for i in self.validation_hist[name]]
-                self.hist[name] = [i / train_proportion for i in self.hist[name]]
-
-                # reassing the main loss to be displayed
-                self.training_hist[name] = self.hist[name]
-                self.hist[name] = self.validation_hist[name]
-
-                if tracking:
-                    for k, v in self.logp_hist[name].items():
-                        self.logp_hist[name][k] = [i / train_proportion for i in self.logp_hist[name][k]]
-                        self.logp_hist_val[name][k] = [i / (1 - train_proportion) for i in self.logp_hist_val[name][k]]
-
-                    self.logp_hist_train[name] = self.logp_hist[name]
-                    self.logp_hist[name] = self.logp_hist_val[name]
-
-            if self.verbose:
-                print(plt.plot(np.log10(self.hist[name][0:])));
-
     def step_train(self, name, x_data, extra_data):
 
         return self.svi[name].step(x_data)
@@ -562,12 +301,13 @@ class PyroModel(BaseModel):
         """
         for i in self.hist.keys():
             print(plt.plot(np.log10(np.array(self.hist[i])[iter_start:iter_end])));
+
     @staticmethod
     def predictive(state, guide, num_samples, random_seed):
 
-        #extra_data['x_data'] = x_data
+        # extra_data['x_data'] = x_data
 
-        #return Predictive(model=model, guide=guide, params=extra_data,
+        # return Predictive(model=model, guide=guide, params=extra_data,
         #                  num_samples=num_samples, return_sites=node,
         #                  parallel=True)(rng_key=random.PRNGKey(random_seed),
         #                                 **extra_data)
@@ -576,17 +316,20 @@ class PyroModel(BaseModel):
 
     def sample_node1(self, node, init, batch_size: int = 50, random_seed=65756):
 
-        post_samples = self.predictive(state=self.svi[init].get_params(self.state[init]), 
-                                       guide=self.guide_i[init], 
+        post_samples = self.predictive(state=self.state[init],#self.svi[init].get_params(self.state[init]),
+                                       guide=self.guide_i[init],
                                        num_samples=batch_size, random_seed=random_seed)
-        #self.predictive(model=self.model, guide=self.guide_i[init],
+        # self.predictive(model=self.model, guide=self.guide_i[init],
         #                               x_data=self.x_data, extra_data=self.extra_data,
         #                               num_samples=batch_size, node=[node],
         #                               random_seed=random_seed)
-        post_samples = {k: np.array(v)
-                        for k, v in post_samples.items() if k == node}
+        post_samples_np = {k: np.array(v)
+                           for k, v in post_samples.items() if k == node}
+        del post_samples
+        import gc
+        gc.collect()
 
-        return post_samples[node]
+        return post_samples_np[node]
 
     def sample_node(self, node, init, n_sampl_iter,
                     batch_size: int = 50, suff='', random_seed=65756):
@@ -610,29 +353,32 @@ class PyroModel(BaseModel):
 
         # nodes = self.state[init].keys
         # nodes = nodes[nodes != "data_target"]
-        
-        post_samples = self.predictive(state=self.svi[init].get_params(self.state[init]), 
-                                       guide=self.guide_i[init], 
+
+        post_samples = self.predictive(state=self.state[init],#self.svi[init].get_params(self.state[init]),
+                                       guide=self.guide_i[init],
                                        num_samples=batch_size, random_seed=random_seed)
-        #self.predictive(model=self.model, guide=self.guide_i[init],
+        # self.predictive(model=self.model, guide=self.guide_i[init],
         #                               x_data=self.x_data, extra_data=self.extra_data,
         #                               num_samples=batch_size, node=[node],
         #                               random_seed=random_seed)
 
-        #post_samples = self.predictive(model=self.model, guide=self.guide_i[init],
+        # post_samples = self.predictive(model=self.model, guide=self.guide_i[init],
         #                               x_data=self.x_data, extra_data=self.extra_data,
         #                               num_samples=batch_size,
         #                               random_seed=random_seed, node=self.node_list)
-        post_samples = {k: np.array(v)
-                        for k, v in post_samples.items() if k != "data_target"}
+        post_samples_np = {k: np.array(v)
+                           for k, v in post_samples.items() if k != "data_target"}
+        del post_samples
+        import gc
+        gc.collect()
 
-        return post_samples
+        return post_samples_np
 
     def sample_all(self, n_sampl_iter, init='init_1', batch_size: int = 50, random_seed=65756):
 
         # sample first batch
         self.samples['post_samples'] = self.sample_all1(init, batch_size=batch_size,
-                                       random_seed=random_seed)
+                                                        random_seed=random_seed)
 
         for it in tqdm(range(n_sampl_iter - 1)):
             # sample remaining batches
@@ -640,7 +386,7 @@ class PyroModel(BaseModel):
 
             # concatenate batches
             self.samples['post_samples'] = {k: np.concatenate((self.samples['post_samples'][k],
-                                                                post_samples[k]), axis=0)
+                                                               post_samples[k]), axis=0)
                                             for k in post_samples.keys()}
 
     def b_evaluate_stability(self, node, n_samples: int = 1000, batch_size: int = 10,
@@ -662,7 +408,7 @@ class PyroModel(BaseModel):
         for i in self.guide_i.keys():
             self.sample_node(node, i, self.n_sampl_iter,
                              batch_size=self.n_sampl_batch, suff='_stab',
-                                       random_seed=random_seed)
+                             random_seed=random_seed)
 
         # plot correlations of posterior mean between training initialisations
         for i in range(len(self.samples[node + '_stab'].keys()) - 1):
@@ -696,7 +442,7 @@ class PyroModel(BaseModel):
             # Sample all parameters - might use a lot of GPU memory
 
             self.sample_all(self.n_sampl_iter, init=mean_field_slot, batch_size=self.n_sampl_batch,
-                                       random_seed=random_seed)
+                            random_seed=random_seed)
 
             self.param_names = list(self.samples['post_samples'].keys())
 
@@ -715,7 +461,7 @@ class PyroModel(BaseModel):
         else:
             self.sample_node(node, mean_field_slot, self.n_sampl_iter,
                              batch_size=self.n_sampl_batch, suff='',
-                                       random_seed=random_seed)
+                             random_seed=random_seed)
 
         return (self.samples)
 
@@ -766,4 +512,4 @@ class PyroModel(BaseModel):
         self.samples['post_sample_sds'] = {v: post_samples[v].std(axis=0) for v in post_samples.varnames}
 
         if (save_samples):
-            self.samples['post_samples'] = post_samples
+            self.samples['post_samples']
