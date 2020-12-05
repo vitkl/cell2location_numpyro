@@ -194,10 +194,10 @@ class PyroModel(BaseModel):
                 self.guide_i[name] = AutoNormal(self.model,
                                                 init_loc_fn=init_to_mean)  # init_to_feasible, init_to_median)
 
-            elif method is 'iaf':
-                self.guide_i[name] = AutoIAFNormal(self.model, init_loc_fn=init_to_mean,
-                                                   # init_to_feasible, init_to_median
-                                                   **guide_aevb_kwargs)
+            #elif method is 'iaf':
+            #    self.guide_i[name] = AutoIAFNormal(self.model, init_loc_fn=init_to_mean,
+            #                                       # init_to_feasible, init_to_median
+            #                                       **guide_aevb_kwargs)
             elif method is 'custom':
                 self.guide_i[name] = self.guide
 
@@ -449,14 +449,14 @@ class PyroModel(BaseModel):
                                                                post_samples[k]), axis=0)
                                             for k in post_samples.keys()}
 
-    def b_evaluate_stability(self, node, quantile=True, n_samples: int = 1, batch_size: int = 10,
+    def b_evaluate_stability(self, node, fact_filt=None, quantile=True, n_samples: int = 1, batch_size: int = 10,
                              align=True, transpose=True, random_seed=65756):
         r""" Evaluate stability of posterior samples between training initialisations
         (takes samples and correlates the values of factors between training initialisations)
         :param node: which pymc3 node to sample? Factors should be in columns.
         :param n_samples: the number of samples.
-        :param batch_size: generate samples in batches of size `batch_size`. Necessary for the computation to fit in the GPU memory 
-        :return: self.samples[node_name+_stab] dictionary with an element for each training initialisation. 
+        :param batch_size: generate samples in batches of size `batch_size`. Necessary for the computation to fit in the GPU memory
+        :return: self.samples[node_name+_stab] dictionary with an element for each training initialisation.
         """
 
         if quantile:
@@ -482,6 +482,10 @@ class PyroModel(BaseModel):
             if transpose:
                 x = x.T
                 y = y.T
+
+            if fact_filt is not None:
+                x = x[:, fact_filt]
+                y = y[:, fact_filt]
             print(self.align_plot_stability(x, y,
                                             str(1), str(i + 2), align=align))
 
