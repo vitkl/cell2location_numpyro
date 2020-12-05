@@ -17,7 +17,7 @@ import numpyro as pyro
 from numpyro import handlers as poutine  # -
 from numpyro.infer import SVI, Trace_ELBO
 from numpyro.infer import Predictive
-#from numpyro.infer.autoguide import AutoNormal
+# from numpyro.infer.autoguide import AutoNormal
 from numpyro.infer.autoguide import AutoIAFNormal
 # from numpyro.infer.autoguide import AutoDelta
 # from numpyro.infer.autoguide import AutoGuideList
@@ -27,8 +27,8 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset, DataLoader
 
 from cell2location.models.base_model import BaseModel
-#from cell2location_numpyro.distributions.AutoNormalSoftplus import AutoNormal
-#import cell2location_numpyro.distributions.AutoNormalSoftplus
+# from cell2location_numpyro.distributions.AutoNormalSoftplus import AutoNormal
+# import cell2location_numpyro.distributions.AutoNormalSoftplus
 from cell2location_numpyro.distributions.AutoNormal import AutoNormal
 from cell2location_numpyro.distributions.AutoNormal import init_to_mean
 
@@ -140,8 +140,9 @@ class PyroModel(BaseModel):
 
     def fit_advi_iterative(self, n: int = 3, method='advi', n_type='restart',
                            n_iter=None, learning_rate=None, progressbar=True,
-                           guide_aevb_kwargs={}, random_seed=[5475, 436, 24546, 46]):
-        r""" Find posterior using ADVI (deprecated)
+                           guide_aevb_kwargs={}, random_seed=[5475, 436, 24546, 46],
+                           num_particles=1):
+        r""" Find posterior using ADVI
         (maximising likehood of the data and minimising KL-divergence of posterior to prior)
         :param n: number of independent initialisations
         :param method: which approximation of the posterior (guide) to use?.
@@ -156,6 +157,7 @@ class PyroModel(BaseModel):
         """
 
         self.random_seed = random_seed
+        self.num_particles = num_particles
 
         # Convert to requested data type
         # self.x_data = self.X_data.astype(self.data_type)
@@ -163,6 +165,7 @@ class PyroModel(BaseModel):
         # initialise parameter store
         self.svi = {}
         self.state = {}
+        self.state_param = {}
         self.hist = {}
         self.guide_i = {}
         self.samples = {}
@@ -203,7 +206,7 @@ class PyroModel(BaseModel):
                                  # limit the gradient step from becoming too large
                                  optim.ClippedAdam(clip_norm=jnp.array(self.total_grad_norm_constraint),
                                                    **{'step_size': jnp.array(learning_rate)}),
-                                 loss=Trace_ELBO())
+                                 loss=Trace_ELBO(self.num_particles))
 
             # record ELBO Loss history here
             self.hist[name] = []
@@ -237,7 +240,8 @@ class PyroModel(BaseModel):
                                          init_state, jnp.arange(n_iter))
                 # print(state)
                 epochs_iterator.set_description('ELBO Loss: ' + '{:.4e}'.format(losses[::-1][0]))
-            self.state[name] = self.svi[name].get_params(state).copy()
+            self.state[name] = state
+            self.state_param[name] = self.svi[name].get_params(state).copy()
             self.hist[name] = losses
 
             ### very slow
@@ -249,6 +253,42 @@ class PyroModel(BaseModel):
             #                                              extra_data=self.extra_data)
             #    self.hist[name].append(loss)
             #    epochs_iterator.set_description('ELBO Loss: ' + '{:.4e}'.format(loss))
+
+    def fit_advi_refine(self, n_iter=None):
+        r""" Continue training posterior using ADVI
+        :param n_iter: number of iterations
+        :return: self.svi dictionary with svi pyro objects for each n,
+            and sefl.hist dictionary storing training history.
+        """
+
+        if n_iter is None:
+            n_iter = self.n_iter
+
+        init_names = list(self.state.keys())
+
+        for i, name in enumerate(init_names):
+
+            # pick dataset depending on the training mode and move to GPU
+            if np.isin(self.n_type, ['cv', 'bootstrap']):
+                self.x_data = self.X_data_sample[i].astype(self.data_type)
+            else:
+                self.x_data = self.X_data.astype(self.data_type)
+
+            # move data to default device
+            self.x_data = device_put(self.x_data)
+
+            ### fast but does not train
+            epochs_iterator = tqdm(range(1))
+            for e in epochs_iterator:
+                state, losses = lax.scan(lambda state_1, i: self.svi[name].update(state_1,
+                                                                                  x_data=self.x_data),
+                                         # TODO for minibatch DataLoader goes here
+                                         self.state[name], jnp.arange(n_iter))
+                # print(state)
+                epochs_iterator.set_description('ELBO Loss: ' + '{:.4e}'.format(losses[::-1][0]))
+            self.state[name] = state
+            self.state_param[name] = self.svi[name].get_params(state).copy()
+            self.hist[name] = list(self.hist[name]) + list(losses)
 
     def run(self, name, x_data, extra_data,
             random_seed, n_iter, progressbar):
@@ -314,9 +354,24 @@ class PyroModel(BaseModel):
         return guide.sample_posterior(random.PRNGKey(random_seed), state,
                                       sample_shape=(num_samples,)).copy()
 
+    @staticmethod
+    def predictive_quantile(params, guide, quantiles):
+
+        return guide.quantiles(params, quantiles)
+
+    @staticmethod
+    def predictive_sigma_lognormal(params, guide):
+        sigma = guide.sigma_lognormal(params=params)
+        return sigma
+
+    @staticmethod
+    def predictive_mu_lognormal(params, guide):
+        mu = guide.mu_lognormal(params=params)
+        return mu
+
     def sample_node1(self, node, init, batch_size: int = 50, random_seed=65756):
 
-        post_samples = self.predictive(state=self.state[init],#self.svi[init].get_params(self.state[init]),
+        post_samples = self.predictive(state=self.state_param[init],  # self.svi[init].get_params(self.state[init]),
                                        guide=self.guide_i[init],
                                        num_samples=batch_size, random_seed=random_seed)
         # self.predictive(model=self.model, guide=self.guide_i[init],
@@ -332,29 +387,34 @@ class PyroModel(BaseModel):
         return post_samples_np[node]
 
     def sample_node(self, node, init, n_sampl_iter,
-                    batch_size: int = 50, suff='', random_seed=65756):
+                    batch_size: int = 1, suff='', random_seed=65756):
 
-        # sample first batch
-        self.samples[node + suff][init] = self.sample_node1(node, init, batch_size=batch_size,
-                                                            random_seed=random_seed)
+        if batch_size == 1:
+            self.samples[node + suff][init] = np.array(self.predictive_quantile(params=self.state_param[init],
+                                                                                guide=self.guide_i[init],
+                                                                                quantiles=0.5)[node])
+        else:
+            # sample first batch
+            self.samples[node + suff][init] = self.sample_node1(node, init, batch_size=batch_size,
+                                                                random_seed=random_seed)
 
-        for it in tqdm(range(n_sampl_iter - 1)):
-            # sample remaining batches
-            post_node = self.sample_node1(node, init, batch_size=batch_size,
-                                          random_seed=random_seed)
+            for it in tqdm(range(n_sampl_iter - 1)):
+                # sample remaining batches
+                post_node = self.sample_node1(node, init, batch_size=batch_size,
+                                              random_seed=random_seed)
 
-            # concatenate batches
-            self.samples[node + suff][init] = np.concatenate((self.samples[node + suff][init], post_node), axis=0)
+                # concatenate batches
+                self.samples[node + suff][init] = np.concatenate((self.samples[node + suff][init], post_node), axis=0)
 
-        # compute mean across samples
-        self.samples[node + suff][init] = np.array(self.samples[node + suff][init].mean(0))
+            # compute mean across samples
+            self.samples[node + suff][init] = np.array(self.samples[node + suff][init].mean(0))
 
     def sample_all1(self, init='init_1', batch_size: int = 50, random_seed=65756):
 
         # nodes = self.state[init].keys
         # nodes = nodes[nodes != "data_target"]
 
-        post_samples = self.predictive(state=self.state[init],#self.svi[init].get_params(self.state[init]),
+        post_samples = self.predictive(state=self.state_param[init],  # self.svi[init].get_params(self.state[init]),
                                        guide=self.guide_i[init],
                                        num_samples=batch_size, random_seed=random_seed)
         # self.predictive(model=self.model, guide=self.guide_i[init],
@@ -389,7 +449,7 @@ class PyroModel(BaseModel):
                                                                post_samples[k]), axis=0)
                                             for k in post_samples.keys()}
 
-    def b_evaluate_stability(self, node, n_samples: int = 1000, batch_size: int = 10,
+    def b_evaluate_stability(self, node, quantile=True, n_samples: int = 1, batch_size: int = 10,
                              align=True, transpose=True, random_seed=65756):
         r""" Evaluate stability of posterior samples between training initialisations
         (takes samples and correlates the values of factors between training initialisations)
@@ -399,9 +459,14 @@ class PyroModel(BaseModel):
         :return: self.samples[node_name+_stab] dictionary with an element for each training initialisation. 
         """
 
+        if quantile:
+            n_samples = 1
         self.n_samples = n_samples
         self.n_sampl_iter = int(np.ceil(n_samples / batch_size))
-        self.n_sampl_batch = batch_size
+        if n_samples == 1:
+            self.n_sampl_batch = 1
+        else:
+            self.n_sampl_batch = batch_size
 
         self.samples[node + '_stab'] = {}
 
@@ -420,8 +485,8 @@ class PyroModel(BaseModel):
             print(self.align_plot_stability(x, y,
                                             str(1), str(i + 2), align=align))
 
-    def sample_posterior(self, node='all',
-                         n_samples: int = 1000, batch_size: int = 10,
+    def sample_posterior(self, node='all', quantile=True,
+                         n_samples: int = 100, batch_size: int = 10,
                          save_samples=False,
                          mean_field_slot='init_1', random_seed=65756):
         r""" Sample posterior distribution of parameters - either all or single parameter
@@ -440,30 +505,67 @@ class PyroModel(BaseModel):
 
         if (node == 'all'):
             # Sample all parameters - might use a lot of GPU memory
+            if quantile:
+                self.samples['post_sample_means'] = self.predictive_quantile(params=self.state_param[mean_field_slot],
+                                                                             guide=self.guide_i[mean_field_slot],
+                                                                             quantiles=0.5)
+                param_names = list(self.samples['post_sample_means'].keys())
+                self.samples['post_sample_means'] = {v: np.array(self.samples['post_sample_means'][v])
+                                                     for v in param_names}
 
-            self.sample_all(self.n_sampl_iter, init=mean_field_slot, batch_size=self.n_sampl_batch,
-                            random_seed=random_seed)
+                self.samples['post_sample_q05'] = self.predictive_quantile(params=self.state_param[mean_field_slot],
+                                                                           guide=self.guide_i[mean_field_slot],
+                                                                           quantiles=0.05)
+                self.samples['post_sample_q05'] = {v: np.array(self.samples['post_sample_q05'][v])
+                                                   for v in param_names}
 
-            self.param_names = list(self.samples['post_samples'].keys())
+                self.samples['post_sample_q95'] = self.predictive_quantile(params=self.state_param[mean_field_slot],
+                                                                           guide=self.guide_i[mean_field_slot],
+                                                                           quantiles=0.95)
+                self.samples['post_sample_q95'] = {v: np.array(self.samples['post_sample_q95'][v])
+                                                   for v in param_names}
 
-            self.samples['post_sample_means'] = {v: np.array(self.samples['post_samples'][v].mean(axis=0))
-                                                 for v in self.param_names}
-            self.samples['post_sample_q05'] = {v: np.array(np.quantile(self.samples['post_samples'][v], 0.05, axis=0))
-                                               for v in self.param_names}
-            self.samples['post_sample_q95'] = {v: np.array(np.quantile(self.samples['post_samples'][v], 0.95, axis=0))
-                                               for v in self.param_names}
-            self.samples['post_sample_sds'] = {v: np.array(self.samples['post_samples'][v].std(axis=0))
-                                               for v in self.param_names}
+                self.samples['post_sample_sds'] = self.predictive_sigma_lognormal(
+                    params=self.state_param[mean_field_slot],
+                    guide=self.guide_i[mean_field_slot])
+                param_names = list(self.samples['post_sample_sds'].keys())
+                self.samples['post_sample_sds'] = {v: np.array(self.samples['post_sample_sds'][v])
+                                                   for v in param_names}
 
-            if not save_samples:
-                self.samples['post_samples'] = None
+                self.samples['post_sample_mu_lognormal'] = self.predictive_mu_lognormal(
+                    params=self.state_param[mean_field_slot],
+                    guide=self.guide_i[mean_field_slot])
+                param_names = list(self.samples['post_sample_mu_lognormal'].keys())
+                self.samples['post_sample_mu_lognormal'] = {v: np.array(self.samples['post_sample_mu_lognormal'][v])
+                                                            for v in param_names}
+
+            else:
+
+                self.sample_all(self.n_sampl_iter, init=mean_field_slot, batch_size=self.n_sampl_batch,
+                                random_seed=random_seed)
+
+                param_names = list(self.samples['post_samples'].keys())
+
+                self.samples['post_sample_means'] = {v: np.array(self.samples['post_samples'][v].mean(axis=0))
+                                                     for v in param_names}
+                self.samples['post_sample_q05'] = {
+                    v: np.array(np.quantile(self.samples['post_samples'][v], 0.05, axis=0))
+                    for v in param_names}
+                self.samples['post_sample_q95'] = {
+                    v: np.array(np.quantile(self.samples['post_samples'][v], 0.95, axis=0))
+                    for v in param_names}
+                self.samples['post_sample_sds'] = {v: np.array(self.samples['post_samples'][v].std(axis=0))
+                                                   for v in param_names}
+
+                if not save_samples:
+                    self.samples['post_samples'] = None
 
         else:
             self.sample_node(node, mean_field_slot, self.n_sampl_iter,
                              batch_size=self.n_sampl_batch, suff='',
                              random_seed=random_seed)
 
-        return (self.samples)
+        return self.samples
 
     def save_checkpoint(self, n, prefix=''):
         r""" Save pyro parameter store (current status of Variational parameters) to disk

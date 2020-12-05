@@ -29,6 +29,14 @@ from numpyro.distributions.util import periodic_repeat, sum_rightmost
 from functools import partial
 
 
+def sigma_lognormal(locs, scales):
+    return (jnp.exp(scales * scales) - 1) * jnp.exp(2 * locs + scales * scales)
+
+
+def mu_lognormal(locs, scales):
+    return jnp.exp(locs + (scales * scales) / 2)
+
+
 def init_to_mean(site=None):
     """
     Initialize to the prior mean; fallback to median if mean is undefined.
@@ -121,13 +129,14 @@ class AutoNormal(AutoGuide):
                 site_loc = numpyro.param("{}_{}_loc".format(name, self.prefix), init_loc,
                                          event_dim=event_dim)
 
-                #def inv_softplus(x):
+                # def inv_softplus(x):
                 #    return jnp.log(jnp.exp(jnp.abs(x)) - jnp.ones((1, 1)))
 
-                #self._init_scale = inv_softplus(jnp.sqrt(jnp.abs(init_loc)))
+                # self._init_scale = inv_softplus(jnp.sqrt(jnp.abs(init_loc)))
 
                 site_scale_unconstrained = numpyro.param("{}_{}_scale".format(name, self.prefix),
-                                                         jnp.full(jnp.shape(init_loc), self._init_scale),#self._init_scale,
+                                                         jnp.full(jnp.shape(init_loc), self._init_scale),
+                                                         # self._init_scale,
                                                          constraint=constraints.real,
                                                          event_dim=event_dim)
                 site_scale = softplus(site_scale_unconstrained)
@@ -174,6 +183,24 @@ class AutoNormal(AutoGuide):
     def median(self, params):
         locs = {k: params["{}_{}_loc".format(k, self.prefix)] for k, v in self._init_locs.items()}
         return self._constrain(locs)
+
+    def sigma_lognormal(self, params):
+        # Change this in the future to also produce estimates for deterministic nodes
+
+        sigma = {k: sigma_lognormal(params["{}_{}_loc".format(k, self.prefix)],
+                                    softplus(params["{}_{}_scale".format(k, self.prefix)]))
+                 for k, v in self._init_locs.items()}
+
+        return sigma
+
+    def mu_lognormal(self, params):
+        # Change this in the future to also produce estimates for deterministic nodes
+
+        mu = {k: mu_lognormal(params["{}_{}_loc".format(k, self.prefix)],
+                              softplus(params["{}_{}_scale".format(k, self.prefix)]))
+              for k, v in self._init_locs.items()}
+
+        return mu
 
     def quantiles(self, params, quantiles):
         quantiles = jnp.array(quantiles)[..., None]

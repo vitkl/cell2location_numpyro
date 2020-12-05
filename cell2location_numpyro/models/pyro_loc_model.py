@@ -55,6 +55,26 @@ class PyroLocModel(PyroModel):
         # move data and modules to default device
         self.cell_state = device_put(self.cell_state)
 
+    def predictive_sigma_lognormal(self, params, guide):
+
+        sigma = guide.sigma_lognormal(params=params)
+
+        # add deterministic nodes
+        sigma['gene_factors'] = np.sqrt(self.cell_state)
+        sigma['nUMI_factors'] = (sigma['spot_factors'] * (sigma['gene_factors'] * sigma['gene_level']).sum(0))
+
+        return sigma
+
+    def predictive_mu_lognormal(self, params, guide):
+
+        mu = guide.mu_lognormal(params=params)
+
+        # add deterministic nodes
+        mu['gene_factors'] = self.cell_state
+        mu['nUMI_factors'] = (mu['spot_factors'] * (mu['gene_factors'] * mu['gene_level']).sum(0))
+
+        return mu
+
     def evaluate_stability(self, n_samples=1000, align=False):
         r""" Evaluate stability in factor contributions to spots.
         """
