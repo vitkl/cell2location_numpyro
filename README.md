@@ -21,11 +21,20 @@ Overview of the spatial mapping approach and the workflow enabled by cell2locati
 
 Tutorials covering the estimation of expresson signatures of reference cell types (1/3), spatial mapping with cell2location (2/3) and the downstream analysis (3/3) can be found here: https://cell2location.readthedocs.io/en/latest/
 
+Numpyro translation can be used as follows:
+
+```python
+from cell2location_numpyro.models.LocationModelLinearDependentWMultiExperimentPyro import LocationModelLinearDependentWMultiExperimentPyro
+
+r = cell2location.run_cell2location(
+           model_name=LocationModelLinearDependentWMultiExperimentPyro, ...)
+```
+
 There are 2 ways to install and use our package: setup your [own conda environment](https://github.com/BayraktarLab/cell2location#installation-of-dependecies-and-configuring-environment) or use the [singularity](https://github.com/BayraktarLab/cell2location#using-singularity-image) and [docker](https://github.com/BayraktarLab/cell2location#using-docker-image) images (recommended). See below for details.
 
 You can also try cell2location on [Google Colab](https://colab.research.google.com/github/vitkl/cell2location_numpyro/blob/main/docs/notebooks/cell2location_short_demo_colab.ipynb) on a smaller data subset containing somatosensory cortex.
 
-Please report bugs and feedback via https://github.com/BayraktarLab/cell2location/issues .
+Please report bugs and feedback via https://github.com/vitkl/cell2location_numpyro/issues and ask any usage questions in https://github.com/BayraktarLab/cell2location/discussions.
 
 ## Configure your own conda environment
 
@@ -53,10 +62,11 @@ louvain hyperopt loompy cmake nose tornado dill ipython bbknn seaborn matplotlib
 mkl-service pygpu --channel bioconda --channel conda-forge
 ```
 
-Do not install pymc3 and theano with conda because it will not use the system cuda (GPU drivers) and we had problems with cuda installed in the local environment, install them with pip:
+Do not install pymc3, theano and numpyro with conda because it will not use the system cuda (GPU drivers) and we had problems with cuda installed in the local environment, install them with pip:
 
 ```bash
-pip install plotnine pymc3 torch pyro-ppl
+pip install plotnine pymc3>=3.8,<3.10 torch pyro-ppl
+pip install -q --upgrade git+https://github.com/pyro-ppl/numpyro.git jax==0.2.3 jaxlib==0.1.56+cuda102 -f
 ```
 
 #### 1. Method 2: Create environment from file
@@ -64,64 +74,24 @@ pip install plotnine pymc3 torch pyro-ppl
 Create `cellpymc` environment from file, which will install all the required conda and pip packages:
 
 ```bash
-git clone https://github.com/BayraktarLab/cell2location.git
+git clone https://github.com/vitkl/cell2location_numpyro.git
 cd cell2location
 conda env create -f environment.yml
 ```
 
-### 2. Install `cell2location` package
+### 2. Install numpyro translation of `cell2location` package
 
 ```bash
-pip install git+https://github.com/BayraktarLab/cell2location.git
+pip install git+https://github.com/vitkl/cell2location_numpyro.git
 ```
 
 ## Using docker image
 
-[![Docker Repository on Quay](https://quay.io/repository/vitkl/cell2location/status "Docker Repository on Quay")](https://quay.io/repository/vitkl/cell2location)
-
-1. Make sure you have Docker Engine [installed](https://docs.docker.com/engine/install/). Note that you'll need root access for the installation.
-   1. (recommended) If you plan to utilize GPU install [Nvidia Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html#docker)
-2. Pull docker image
-
-       docker pull quay.io/vitkl/cell2location
-
-3. Run docker container
-
-       docker run -i --rm -p 8848:8888 quay.io/vitkl/cell2location:latest
-
-   1. (recommended) For running with GPU support use
-   
-          docker run -i --rm -p 8848:8888 --gpus all quay.io/vitkl/cell2location:latest
-   
-4. Go to http://127.0.0.1:8848/?token= and log in using `cell2loc` token
-
+Not availlable yet
 
 ## Using singularity image
 
-Singularity environments are used in the compute cluster environments (check with your local IT if Singularity is provided on your cluster). Follow the steps here to use it on your system, assuming that you need to use the GPU:
-
-1. Download the container from our data portal:
-
-```
-wget https://cell2location.cog.sanger.ac.uk/singularity/cell2location-20201116.sif
-```
-
-2. Submit a cluster job (LSF system) with GPU requested and start jupyter a notebook within a container (`--nv` option needed to use GPU):
-
-```
-bsub -q gpu_queue_name -M60000 \
-  -R"select[mem>60000] rusage[mem=60000, ngpus_physical=1.00] span[hosts=1]"  \
-  -gpu "mode=shared:j_exclusive=yes" -Is \
-  /bin/singularity exec \
-  --no-home  \
-  --nv \
-  -B /nfs/working_directory:/working_directory \
-  path/to/cell2location-20201116.sif \
-  /bin/bash -c "cd /working_directory && HOME=$(mktemp -d) jupyter notebook --notebook-dir=/working_directory --NotebookApp.token='cell2loc' --ip=0.0.0.0 --port=1237 --no-browser --allow-root"
-```
-Replace **1)** the path to `/bin/singularity` with the one availlable on your system; **2)** the path to `/nfs/working_directory` to the directory which you need to work with (mount to the environment, `/nfs/working_directory:/working_directory`); **3)** path to the singularity image downloaded in step 1 (`path/to/cell2location-20201116.sif`).
-
-3. Take a note of the cluster node name `node-name` that the job started on. Go to http://node-name:1237/?token= and log in using `cell2loc` token
+Not availlable yet
 
 ## Documentation and API details
 
