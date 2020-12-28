@@ -36,4 +36,3 @@ dependencies:
     - git+https://github.com/BayraktarLab/cell2location.git
     - git+https://github.com/pyro-ppl/numpyro.git
     - jax
-    - jaxlib==0.1.56+cuda102
