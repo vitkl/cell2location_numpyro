@@ -32,7 +32,7 @@ r = cell2location.run_cell2location(
 
 There are 2 ways to install and use our package: setup your [own conda environment](https://github.com/BayraktarLab/cell2location#installation-of-dependecies-and-configuring-environment) or use the [singularity](https://github.com/BayraktarLab/cell2location#using-singularity-image) and [docker](https://github.com/BayraktarLab/cell2location#using-docker-image) images (recommended). See below for details.
 
-You can also try cell2location on [Google Colab](https://colab.research.google.com/github/vitkl/cell2location_numpyro/blob/main/docs/notebooks/cell2location_short_demo_colab.ipynb) on a smaller data subset containing somatosensory cortex.
+You can also try cell2location on [Google Colab](https://colab.research.google.com/github/vitkl/cell2location_numpyro/blob/main/docs/notebooks/cell2location_short_demo_colab.ipynb).
 
 Please report bugs and feedback via https://github.com/vitkl/cell2location_numpyro/issues and ask any usage questions in https://github.com/BayraktarLab/cell2location/discussions.
 
