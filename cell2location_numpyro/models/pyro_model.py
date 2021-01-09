@@ -231,7 +231,7 @@ class PyroModel(BaseModel):
             # init_state = self.svi[name].init(random.PRNGKey(random_seed), x_data=self.x_data)
             # init_state = svi.init(random.PRNGKey(random_seed), x_data=x_data)
 
-            ### fast but does not train
+            ### fast
             epochs_iterator = tqdm(range(1))
             for e in epochs_iterator:
                 state, losses = lax.scan(lambda state_1, i: self.svi[name].update(state_1,
