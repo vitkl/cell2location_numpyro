@@ -75,7 +75,7 @@ Create `cellpymc` environment from file, which will install all the required con
 
 ```bash
 git clone https://github.com/vitkl/cell2location_numpyro.git
-cd cell2location
+cd cell2location_numpyro
 conda env create -f environment.yml
 
 # install a specific version of jaxlib for cuda-10.2
