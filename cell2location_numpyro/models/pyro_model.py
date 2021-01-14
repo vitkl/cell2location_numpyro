@@ -228,31 +228,38 @@ class PyroModel(BaseModel):
 
             # self.state[name] = self.step_init(name, self.x_data, self.extra_data, random_seed)
             init_state = self.step_init(name, self.x_data, self.extra_data, self.random_seed[i])
+            self.state[name] = init_state
             # init_state = self.svi[name].init(random.PRNGKey(random_seed), x_data=self.x_data)
             # init_state = svi.init(random.PRNGKey(random_seed), x_data=x_data)
 
-            ### fast
-            epochs_iterator = tqdm(range(1))
-            for e in epochs_iterator:
-                state, losses = lax.scan(lambda state_1, i: self.svi[name].update(state_1,
-                                                                                  x_data=self.x_data),
-                                         # TODO for minibatch DataLoader goes here
-                                         init_state, jnp.arange(n_iter))
-                # print(state)
-                epochs_iterator.set_description('ELBO Loss: ' + '{:.4e}'.format(losses[::-1][0]))
-            self.state[name] = state
-            self.state_param[name] = self.svi[name].get_params(state).copy()
-            self.hist[name] = losses
-
-            ### very slow
-            # epochs_iterator = tqdm(range(n_iter))
-            # for e in epochs_iterator:
-            #    self.state[name], loss = self.step_update(svi=self.svi[name],
-            #                                              svi_state=self.state[name],
-            #                                              x_data=self.x_data,
-            #                                              extra_data=self.extra_data)
-            #    self.hist[name].append(loss)
-            #    epochs_iterator.set_description('ELBO Loss: ' + '{:.4e}'.format(loss))
+            if not progressbar:
+                ### fast
+                epochs_iterator = tqdm(range(1))
+                for e in epochs_iterator:
+                    state, losses = lax.scan(lambda state_1, i: self.svi[name].update(state_1,
+                                                                                      x_data=self.x_data),
+                                             # TODO for minibatch DataLoader goes here
+                                             init_state, jnp.arange(n_iter))
+                    # print(state)
+                    epochs_iterator.set_description('ELBO Loss: ' + '{:.4e}'.format(losses[::-1][0]))
+                    
+                self.state[name] = state
+                self.hist[name] = losses
+                
+            else:
+            
+                jit_step_update = jit(self.step_update(self.svi[name], self.state[name], 
+                                                       self.x_data, self.extra_data))
+                # TODO figure out minibatch static_argnums https://github.com/pyro-ppl/numpyro/issues/869
+                    
+                ### very slow
+                epochs_iterator = tqdm(range(n_iter))
+                for e in epochs_iterator:
+                    self.state[name], loss = jit_step_update(self.state[name])
+                    self.hist[name].append(loss)
+                    epochs_iterator.set_description('ELBO Loss: ' + '{:.4e}'.format(loss))
+            
+            self.state_param[name] = self.svi[name].get_params(self.state[name]).copy()
 
     def fit_advi_refine(self, n_iter=None):
         r""" Continue training posterior using ADVI
@@ -303,10 +310,10 @@ class PyroModel(BaseModel):
         r"""Function that passes data and extra data to numpyro.run"""
 
         def body_fn(svi_state_1):
-            return svi.update(svi_state_1, x_data=x_data)  # , **extra_data)
+            return svi.update(svi_state_1, x_data=x_data) # , **extra_data)
 
-        # return jit(body_fn)(svi_state)
-        return jit(body_fn)(svi_state)
+        return body_fn
+                   
 
     def step_init(self, name, x_data, extra_data, random_seed):
 
