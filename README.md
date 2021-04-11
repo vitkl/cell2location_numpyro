@@ -66,7 +66,7 @@ Do not install pymc3, theano and numpyro with conda because it will not use the 
 
 ```bash
 pip install plotnine pymc3>=3.8,<3.10 torch pyro-ppl
-pip install -q --user --upgrade git+https://github.com/pyro-ppl/numpyro.git jax==0.2.3 jaxlib==0.1.56+cuda102 -f https://storage.googleapis.com/jax-releases/jax_releases.html
+pip install -q --user --upgrade git+https://github.com/pyro-ppl/numpyro.git jax>=0.2.11 jaxlib==0.1.65+cuda102 -f https://storage.googleapis.com/jax-releases/jax_releases.html
 ```
 
 #### 1. Method 2: Create environment from file
@@ -79,7 +79,7 @@ cd cell2location_numpyro
 conda env create -f environment.yml
 
 # install a specific version of jaxlib for cuda-10.2
-pip install -q --prefix /usr/local --upgrade git+https://github.com/pyro-ppl/numpyro.git jax==0.2.3 jaxlib==0.1.56+cuda102 -f https://storage.googleapis.com/jax-releases/jax_releases.html
+pip install -q --prefix /usr/local --upgrade git+https://github.com/pyro-ppl/numpyro.git jax>=0.2.11 jaxlib==0.1.65+cuda102 -f https://storage.googleapis.com/jax-releases/jax_releases.html
 ```
 
 ### 2. Install numpyro translation of `cell2location` package
